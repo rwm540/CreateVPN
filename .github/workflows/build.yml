@@ -1,4 +1,4 @@
-name: Build Desktop App
+name: Build Secure Desktop App
 
 on:
   push:
@@ -17,8 +17,9 @@ jobs:
       with:
         dotnet-version: 8.0.x
         
-    - name: Publish C# Backend
-      run: dotnet publish vpn_engine/vpn_engine.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o backend_dist
+    - name: Publish C# Backend (Native AOT)
+      # Native AOT compiles to machine code, making reverse engineering significantly harder
+      run: dotnet publish vpn_engine/vpn_engine.csproj -c Release -r win-x64 /p:PublishAot=true /p:StripSymbols=true -o backend_dist
       
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -28,16 +29,15 @@ jobs:
     - name: Install Python Dependencies
       run: |
         pip install -r vpn_client/requirements.txt
-        pip install pyinstaller
         
-    - name: Build Python Frontend (PyInstaller)
+    - name: Build Python Frontend (Nuitka Compiler)
+      # Nuitka translates Python to C and compiles it, offering much better protection than PyInstaller
       run: |
-        # We add the compiled C# exe as a data file to the Python executable
-        # The syntax "src;dest" means take src file and put it in dest folder in the bundle
-        pyinstaller --noconfirm --onefile --windowed --name "MyVPN" --add-data "backend_dist/vpn_engine.exe;." vpn_client/main.py
+        python -m nuitka --standalone --onefile --enable-plugin=pyqt6 --windows-disable-console --include-data-file=backend_dist/vpn_engine.exe=vpn_engine.exe --output-filename=MySecureVPN.exe vpn_client/main.py
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MyVPN-Windows
-        path: dist/MyVPN.exe
+        name: MySecureVPN-Windows
+        path: MySecureVPN.exe
+
