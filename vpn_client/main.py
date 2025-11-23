@@ -10,7 +10,23 @@ from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize, QT
 from PyQt6.QtGui import QColor, QFont, QIcon
 
 # Path to the compiled C# backend
-BACKEND_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../vpn_engine/bin/Debug/net8.0/vpn_engine"))
+def get_backend_path():
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable (PyInstaller)
+        base_path = sys._MEIPASS
+        if os.name == 'nt':
+            return os.path.join(base_path, "vpn_engine.exe")
+        return os.path.join(base_path, "vpn_engine")
+    else:
+        # Running from source
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../vpn_engine/bin/Debug/net8.0"))
+        # Check for Windows exe first
+        if os.path.exists(os.path.join(base_dir, "vpn_engine.exe")):
+            return os.path.join(base_dir, "vpn_engine.exe")
+        # Default to linux/mac binary name
+        return os.path.join(base_dir, "vpn_engine")
+
+BACKEND_PATH = get_backend_path()
 
 class BackendWorker(QThread):
     finished = pyqtSignal(str)

@@ -1,0 +1,43 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+        
+    - name: Publish C# Backend
+      run: dotnet publish vpn_engine/vpn_engine.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o backend_dist
+      
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12' 
+        
+    - name: Install Python Dependencies
+      run: |
+        pip install -r vpn_client/requirements.txt
+        pip install pyinstaller
+        
+    - name: Build Python Frontend (PyInstaller)
+      run: |
+        # We add the compiled C# exe as a data file to the Python executable
+        # The syntax "src;dest" means take src file and put it in dest folder in the bundle
+        pyinstaller --noconfirm --onefile --windowed --name "MyVPN" --add-data "backend_dist/vpn_engine.exe;." vpn_client/main.py
+        
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MyVPN-Windows
+        path: dist/MyVPN.exe
