@@ -41,11 +41,12 @@ class BackendWorker(QThread):
         try:
             # Run the C# backend
             cmd = [BACKEND_PATH, self.command] + self.args
-            # If running from source (dotnet run), we might need different handling, 
-            # but here we assume compiled exe for simplicity in Nuitka build
+            
+            # If running from source (dotnet run), we might need different handling
             if not getattr(sys, 'frozen', False) and not os.path.exists(BACKEND_PATH):
-                 # Fallback for dev environment if exe not built
-                 cmd = ["dotnet", "run", "--project", "../vpn_engine", self.command] + self.args
+                 # Fix: Use absolute path for project to avoid CWD issues
+                 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../vpn_engine"))
+                 cmd = ["dotnet", "run", "--project", project_path, self.command] + self.args
             
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
@@ -149,12 +150,91 @@ class VPNClient(QMainWindow):
         
         self.layout.addWidget(self.server_frame)
 
+        # Edit Servers Button
+        self.edit_servers_btn = QPushButton("Edit Servers (Local JSON)")
+        self.edit_servers_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #89b4fa;
+                border: 1px solid #89b4fa;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+            }
+        """)
+        self.edit_servers_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.edit_servers_btn.clicked.connect(self.open_servers_file)
+        self.layout.addWidget(self.edit_servers_btn)
+
+        # Fetch Public Servers Button
+        self.fetch_btn = QPushButton("Update Public Servers (Free)")
+        self.fetch_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #a6e3a1;
+                border: 1px solid #a6e3a1;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+            }
+        """)
+        self.fetch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fetch_btn.clicked.connect(self.fetch_public_servers)
+        self.layout.addWidget(self.fetch_btn)
+
         # Connection Logic Variables
         self.is_connected = False
         self.servers = []
         
         # Load Servers
         self.load_servers()
+
+    def fetch_public_servers(self):
+        self.status_label.setText("FETCHING SERVERS...")
+        self.fetch_btn.setEnabled(False)
+        self.worker = BackendWorker("fetch-public")
+        self.worker.finished.connect(self.on_fetch_complete)
+        self.worker.error.connect(self.on_error)
+        self.worker.start()
+
+    def on_fetch_complete(self, output):
+        self.fetch_btn.setEnabled(True)
+        self.load_servers() # Reload the list
+        QMessageBox.information(self, "Success", "Public servers updated successfully!")
+
+    def open_servers_file(self):
+        # Try to find servers.json
+        paths = [
+            "servers.json",
+            "../servers.json",
+            os.path.join(os.path.dirname(__file__), "../servers.json")
+        ]
+        
+        found_path = None
+        for p in paths:
+            if os.path.exists(p):
+                found_path = os.path.abspath(p)
+                break
+        
+        if found_path:
+            if os.name == 'nt':
+                os.startfile(found_path)
+            else:
+                subprocess.call(('xdg-open', found_path))
+        else:
+            QMessageBox.warning(self, "File Not Found", "Could not find servers.json")
+            # Create it if missing
+            with open("servers.json", "w") as f:
+                f.write('[{"id":"local","name":"Local Server","ip":"127.0.0.1","load":"0%"}]')
+            self.open_servers_file() # Try again
 
     def get_btn_style(self, state):
         if state == "connected":

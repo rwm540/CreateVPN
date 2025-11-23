@@ -1,0 +1,20 @@
+[
+  {
+    "id": "local1",
+    "name": "Localhost Test (127.0.0.1)",
+    "ip": "127.0.0.1",
+    "load": "0%"
+  },
+  {
+    "id": "de1",
+    "name": "Germany - Frankfurt (Free)",
+    "ip": "192.168.1.101",
+    "load": "12%"
+  },
+  {
+    "id": "us1",
+    "name": "USA - New York (Free)",
+    "ip": "192.168.1.102",
+    "load": "45%"
+  }
+]

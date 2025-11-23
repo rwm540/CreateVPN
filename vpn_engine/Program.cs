@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.IO;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace VpnEngine
 {
@@ -22,11 +25,10 @@ namespace VpnEngine
 
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             if (args.Length == 0)
             {
-                // Obfuscated error message or silent fail is better for security, but keeping it usable for now
                 Console.WriteLine("ERR_NO_ARGS");
                 return;
             }
@@ -38,13 +40,15 @@ namespace VpnEngine
                 case "list":
                     ListServers();
                     break;
+                case "fetch-public":
+                    await FetchPublicServers();
+                    break;
                 case "connect":
                     if (args.Length < 2)
                     {
                         Console.WriteLine("ERR_INVALID_ARGS");
                         return;
                     }
-                    // Input validation to prevent injection
                     string serverId = args[1];
                     if (!IsValidServerId(serverId))
                     {
@@ -64,26 +68,93 @@ namespace VpnEngine
 
         static bool IsValidServerId(string id)
         {
-            // Simple validation: alphanumeric only
             foreach (char c in id)
             {
-                if (!char.IsLetterOrDigit(c)) return false;
+                if (!char.IsLetterOrDigit(c) && c != '-' && c != '.') return false;
             }
             return true;
         }
 
+        static async Task FetchPublicServers()
+        {
+            // Fetching from VPNGate API (CSV format)
+            try 
+            {
+                using var client = new HttpClient();
+                // This is a public API for free VPN servers
+                string csvData = await client.GetStringAsync("http://www.vpngate.net/api/iphone/");
+                
+                var servers = new List<ServerInfo>();
+                var lines = csvData.Split('\n');
+                
+                int count = 0;
+                // Skip header (starts at line 2 usually)
+                foreach (var line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("*") || line.StartsWith("#")) continue;
+                    
+                    var parts = line.Split(',');
+                    if (parts.Length > 6)
+                    {
+                        // VPNGate CSV format: HostName,IP,Score,Ping,Speed,CountryLong,CountryShort...
+                        string country = parts[5];
+                        string ip = parts[1];
+                        string speed = (long.Parse(parts[4]) / 1000000).ToString() + " Mbps";
+                        
+                        servers.Add(new ServerInfo 
+                        { 
+                            id = ip, // Use IP as ID for simplicity
+                            name = $"{country} ({speed})", 
+                            ip = ip, 
+                            load = "Public" 
+                        });
+                        
+                        count++;
+                        if (count >= 10) break; // Limit to top 10 to avoid overwhelming UI
+                    }
+                }
+
+                string json = JsonSerializer.Serialize(servers, AppJsonContext.Default.ListServerInfo);
+                Console.WriteLine(json);
+                
+                // Save to local file as cache
+                File.WriteAllText("servers.json", json);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[]"); // Return empty array on error
+            }
+        }
+
         static void ListServers()
         {
-            var servers = new List<ServerInfo>
+            string configPath = "servers.json";
+            
+            // Try to find servers.json
+            if (!File.Exists(configPath))
             {
-                new ServerInfo { id = "de1", name = "Germany - Frankfurt (Free)", ip = "192.168.1.101", load = "12%" },
-                new ServerInfo { id = "us1", name = "USA - New York (Free)", ip = "192.168.1.102", load = "45%" },
-                new ServerInfo { id = "jp1", name = "Japan - Tokyo (Free)", ip = "192.168.1.103", load = "89%" },
-                new ServerInfo { id = "ir1", name = "Iran - Tehran (Internal)", ip = "10.10.10.10", load = "5%" }
+                if (File.Exists("../servers.json")) configPath = "../servers.json";
+            }
+
+            if (File.Exists(configPath))
+            {
+                try 
+                {
+                    string jsonContent = File.ReadAllText(configPath);
+                    var servers = JsonSerializer.Deserialize(jsonContent, AppJsonContext.Default.ListServerInfo);
+                    Console.WriteLine(JsonSerializer.Serialize(servers, AppJsonContext.Default.ListServerInfo));
+                    return;
+                }
+                catch {}
+            }
+
+            // Fallback
+            var defaultServers = new List<ServerInfo>
+            {
+                new ServerInfo { id = "local", name = "No servers found. Click 'Update Public Servers'", ip = "0.0.0.0", load = "0%" }
             };
 
-            // Use the source-generated context for AOT
-            string json = JsonSerializer.Serialize(servers, AppJsonContext.Default.ListServerInfo);
+            string json = JsonSerializer.Serialize(defaultServers, AppJsonContext.Default.ListServerInfo);
             Console.WriteLine(json);
         }
 
