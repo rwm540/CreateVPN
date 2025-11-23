@@ -3,11 +3,11 @@ import time
 import json
 import subprocess
 import os
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QPushButton, QLabel, QComboBox, QHBoxLayout, QFrame,
                              QGraphicsDropShadowEffect, QMessageBox)
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize, QThread, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize, QThread, Signal
+from PySide6.QtGui import QColor, QFont, QIcon
 
 # Path to the compiled C# backend
 def get_backend_path():
@@ -29,8 +29,8 @@ def get_backend_path():
 BACKEND_PATH = get_backend_path()
 
 class BackendWorker(QThread):
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
+    finished = Signal(str)
+    error = Signal(str)
 
     def __init__(self, command, args=[]):
         super().__init__()
@@ -40,7 +40,13 @@ class BackendWorker(QThread):
     def run(self):
         try:
             # Run the C# backend
-            cmd = ["dotnet", BACKEND_PATH + ".dll", self.command] + self.args
+            cmd = [BACKEND_PATH, self.command] + self.args
+            # If running from source (dotnet run), we might need different handling, 
+            # but here we assume compiled exe for simplicity in Nuitka build
+            if not getattr(sys, 'frozen', False) and not os.path.exists(BACKEND_PATH):
+                 # Fallback for dev environment if exe not built
+                 cmd = ["dotnet", "run", "--project", "../vpn_engine", self.command] + self.args
+            
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
                 self.finished.emit(result.stdout.strip())

@@ -33,7 +33,7 @@ jobs:
     - name: Build Python Frontend (Nuitka Compiler)
       # Nuitka translates Python to C and compiles it, offering much better protection than PyInstaller
       run: |
-        python -m nuitka --standalone --onefile --enable-plugin=pyqt6 --windows-disable-console --include-data-file=backend_dist/vpn_engine.exe=vpn_engine.exe --output-filename=MySecureVPN.exe vpn_client/main.py
+        python -m nuitka --standalone --onefile --enable-plugin=pyside6 --windows-console-mode=disable --assume-yes-for-downloads --include-data-file=backend_dist/vpn_engine.exe=vpn_engine.exe --output-filename=MySecureVPN.exe vpn_client/main.py
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
